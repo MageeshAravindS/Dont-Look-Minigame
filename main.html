@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Don't Look - Stage Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050505;
+            color: #ffffff;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .arrow-container {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            align-items: center;
+            min-height: 250px;
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+        }
+
+        .arrow-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            transform: scale(0.4); 
+            flex-shrink: 0;
+        }
+
+        .arrow-visible {
+            opacity: 1;
+        }
+
+        /* Precise Rotations */
+        .dir-up svg { transform: rotate(-90deg); }
+        .dir-down svg { transform: rotate(90deg); }
+        .dir-left svg { transform: rotate(180deg); }
+        .dir-right svg { transform: rotate(0deg); }
+
+        .status-overlay {
+            position: absolute;
+            top: 25%;
+            font-weight: 900;
+            font-size: clamp(3rem, 12vw, 6rem);
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.2s ease;
+            z-index: 50;
+        }
+
+        .active-overlay {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        /* Volunteer Controls */
+        .volunteer-controls {
+            position: fixed;
+            bottom: 40px;
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+        }
+
+        .admin-btn {
+            padding: 1.5rem 3rem;
+            border-radius: 1rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .btn-point { background: #15803d; color: white; }
+        .btn-point:hover { background: #16a34a; transform: translateY(-5px); }
+        .btn-miss { background: #991b1b; color: white; }
+        .btn-miss:hover { background: #dc2626; transform: translateY(-5px); }
+
+        .progress-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 8px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #timer-display {
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 30px rgba(255,255,255,0.1);
+        }
+
+        .timer-warning {
+            color: #ef4444;
+            animation: blink 0.5s infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes pulse-intense {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.08); filter: brightness(1.4); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        .pulse-active {
+            animation: pulse-intense 0.8s infinite ease-in-out;
+        }
+
+        .shake {
+            animation: shake-animation 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake-animation {
+            10%, 90% { transform: translate3d(-10px, 0, 0); }
+            20%, 80% { transform: translate3d(15px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-20px, 0, 0); }
+            40%, 60% { transform: translate3d(20px, 0, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-ui" class="game-container px-4 text-center">
+        <!-- Start Screen -->
+        <div id="start-screen" class="z-10">
+            <h1 class="text-7xl md:text-9xl font-black mb-4 tracking-tighter">DON'T LOOK</h1>
+            <p class="text-zinc-500 mb-12 max-w-lg mx-auto uppercase tracking-[0.3em] text-sm font-bold">10 Rounds • Stage Protocol • Staggered Timer</p>
+            <button onclick="startGame()" class="bg-white text-black px-20 py-6 rounded-2xl font-black text-2xl hover:scale-105 transition-transform active:scale-95 shadow-2xl">
+                START CHALLENGE
+            </button>
+        </div>
+
+        <!-- Battle Screen -->
+        <div id="battle-screen" class="hidden w-full flex flex-col items-center">
+            <!-- Header Stats -->
+            <div class="flex justify-between w-full max-w-5xl mb-12 px-8">
+                <div class="text-left">
+                    <span class="text-zinc-600 uppercase tracking-widest text-xs font-black block mb-1">Current Round</span>
+                    <div id="round-counter" class="text-5xl font-black italic">01 / 10</div>
+                </div>
+                <div class="text-center">
+                    <span class="text-zinc-600 uppercase tracking-widest text-xs font-black block mb-1">Time Limit</span>
+                    <div id="timer-display" class="text-7xl font-black">5.5s</div>
+                </div>
+                <div class="text-right">
+                    <span class="text-zinc-600 uppercase tracking-widest text-xs font-black block mb-1">Points Secured</span>
+                    <div id="score-counter" class="text-5xl font-black italic text-blue-500">00</div>
+                </div>
+            </div>
+
+            <div id="status-text" class="status-overlay">SAFE</div>
+
+            <!-- Arrow Container -->
+            <div id="arrow-container" class="arrow-container"></div>
+
+            <!-- Volunteer Admin Controls -->
+            <div class="volunteer-controls">
+                <button onclick="volunteerAction(true)" class="admin-btn btn-point shadow-xl">
+                    [P] POINT
+                </button>
+                <button onclick="volunteerAction(false)" class="admin-btn btn-miss shadow-xl">
+                    [M] MISS
+                </button>
+            </div>
+            
+            <p class="text-zinc-800 text-xs font-bold uppercase tracking-[0.5em] mt-20">Volunteer Key: P (Point) / M (Miss)</p>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="result-screen" class="hidden">
+            <h2 id="result-title" class="text-8xl md:text-9xl font-black mb-6 tracking-tighter">RESULT</h2>
+            <div class="bg-zinc-900/50 p-12 rounded-3xl border border-zinc-800 mb-12 inline-block min-w-[300px] shadow-2xl">
+                <div class="text-zinc-500 text-sm font-bold uppercase mb-2 tracking-widest">Final Efficiency Score</div>
+                <div id="final-score" class="text-9xl font-black text-white">0</div>
+                <div class="text-zinc-600 text-sm mt-4 italic font-bold">TOTAL ROUNDS: 10</div>
+            </div>
+            <br>
+            <button onclick="resetGame()" class="bg-zinc-800 text-white px-16 py-6 rounded-2xl font-bold text-xl hover:bg-white hover:text-black transition-all">
+                RESET SYSTEM
+            </button>
+        </div>
+
+        <div id="progress" class="progress-bar" style="width: 0%"></div>
+    </div>
+
+    <script>
+        const directions = ['up', 'down', 'left', 'right'];
+        let currentRound = 1;
+        let score = 0;
+        const totalRounds = 10;
+        
+        let isWaitingForVerdict = false;
+        let activeDirections = [];
+        let previousRoundDirections = [];
+        let gameActive = false;
+        
+        // Timer variables
+        let timeLeft = 0;
+        let timerInterval = null;
+
+        const startScreen = document.getElementById('start-screen');
+        const battleScreen = document.getElementById('battle-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const arrowContainer = document.getElementById('arrow-container');
+        const roundText = document.getElementById('round-counter');
+        const scoreText = document.getElementById('score-counter');
+        const timerText = document.getElementById('timer-display');
+        const statusText = document.getElementById('status-text');
+        const progressBar = document.getElementById('progress');
+
+        function shuffle(array) {
+            const newArr = [...array];
+            for (let i = newArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+            }
+            return newArr;
+        }
+
+        function getRandomDirections(count) {
+            let selected = [];
+            let attempts = 0;
+            while (attempts < 20) {
+                const shuffled = shuffle(directions);
+                selected = shuffled.slice(0, count).sort();
+                const lastSorted = [...previousRoundDirections].sort();
+                const isRepeat = selected.length === lastSorted.length && 
+                               selected.every((val, index) => val === lastSorted[index]);
+                if (!isRepeat) break;
+                attempts++;
+            }
+            previousRoundDirections = [...selected];
+            return selected;
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            battleScreen.classList.remove('hidden');
+            battleScreen.classList.add('flex');
+            currentRound = 1;
+            score = 0;
+            scoreText.innerText = "00";
+            gameActive = true;
+            nextRound();
+        }
+
+        function createArrowSvg() {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", "150");
+            svg.setAttribute("height", "150");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("fill", "none");
+            svg.setAttribute("stroke", "currentColor");
+            svg.setAttribute("stroke-width", "2.5");
+            svg.setAttribute("stroke-linecap", "round");
+            svg.setAttribute("stroke-linejoin", "round");
+            
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", "5"); line.setAttribute("y1", "12"); line.setAttribute("x2", "19"); line.setAttribute("y2", "12");
+            
+            const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+            poly.setAttribute("points", "12 5 19 12 12 19");
+            
+            svg.appendChild(line);
+            svg.appendChild(poly);
+            return svg;
+        }
+
+        function startTimer() {
+            // New Scaling Logic:
+            // Formula: 6.0 - (currentRound * 0.5)
+            // Round 1: 5.5s
+            // Round 10: 1.0s
+            timeLeft = 6.0 - (currentRound * 0.5);
+            
+            updateTimerDisplay();
+            
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                }
+                updateTimerDisplay();
+            }, 100);
+        }
+
+        function updateTimerDisplay() {
+            timerText.innerText = timeLeft.toFixed(1) + "s";
+            if (timeLeft < 1.5 && timeLeft > 0) {
+                timerText.classList.add('timer-warning');
+            } else {
+                timerText.classList.remove('timer-warning');
+            }
+        }
+
+        function handleTimeOut() {
+            timerText.innerText = "TIME!";
+            playTone(200, 0.3);
+        }
+
+        function nextRound() {
+            if (currentRound > totalRounds) {
+                showResult();
+                return;
+            }
+
+            isWaitingForVerdict = true;
+            roundText.innerText = `${currentRound.toString().padStart(2, '0')} / ${totalRounds}`;
+            progressBar.style.width = `${((currentRound - 1) / totalRounds) * 100}%`;
+            
+            arrowContainer.innerHTML = '';
+            arrowContainer.classList.remove('shake');
+            
+            let arrowCount = currentRound <= 3 ? 1 : (currentRound <= 7 ? 2 : 3);
+            activeDirections = getRandomDirections(arrowCount);
+
+            setTimeout(() => {
+                if (!gameActive) return;
+                
+                activeDirections.forEach((dir, index) => {
+                    const arrowWrap = document.createElement('div');
+                    arrowWrap.className = `arrow-item dir-${dir}`;
+                    arrowWrap.appendChild(createArrowSvg());
+                    arrowContainer.appendChild(arrowWrap);
+                    
+                    setTimeout(() => {
+                        arrowWrap.style.transform = "scale(1)";
+                        arrowWrap.classList.add('arrow-visible');
+                        
+                        if (index === activeDirections.length - 1) {
+                            arrowWrap.classList.add('pulse-active');
+                            startTimer();
+                        }
+                    }, index * 100);
+                });
+                
+                playTone(400, 0.05);
+            }, 800);
+        }
+
+        function volunteerAction(isPoint) {
+            if (!isWaitingForVerdict || !gameActive) return;
+            isWaitingForVerdict = false;
+            clearInterval(timerInterval);
+
+            if (isPoint) {
+                score++;
+                scoreText.innerText = score.toString().padStart(2, '0');
+                showStatus('POINT', '#22c55e');
+                playTone(800, 0.1);
+            } else {
+                showStatus('MISS', '#ef4444');
+                arrowContainer.classList.add('shake');
+                playTone(100, 0.4);
+            }
+
+            currentRound++;
+            setTimeout(nextRound, 1000);
+        }
+
+        function showStatus(text, color) {
+            statusText.innerText = text;
+            statusText.style.color = color;
+            statusText.classList.add('active-overlay');
+            setTimeout(() => {
+                statusText.classList.remove('active-overlay');
+            }, 800);
+        }
+
+        function showResult() {
+            gameActive = false;
+            clearInterval(timerInterval);
+            battleScreen.classList.add('hidden');
+            battleScreen.classList.remove('flex');
+            resultScreen.classList.remove('hidden');
+            
+            const finalScoreEl = document.getElementById('final-score');
+            finalScoreEl.innerText = score;
+            progressBar.style.width = "100%";
+        }
+
+        function resetGame() {
+            startGame();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (!isWaitingForVerdict) return;
+            const key = e.key.toLowerCase();
+            if (key === 'p' || key === '1') volunteerAction(true);
+            if (key === 'm' || key === '2') volunteerAction(false);
+        });
+
+        function playTone(freq, duration) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                gain.gain.setValueAtTime(0.05, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>
